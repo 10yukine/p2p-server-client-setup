@@ -3,19 +3,19 @@ try {
     $os = Get-CimInstance -ClassName Win32_OperatingSystem
     $windowsName = $os.Caption -replace '^Microsoft\s+', ''
 } catch {
-    Write-Host 'Comnet could not identify this Windows installation. Ask an administrator to check Windows Management Instrumentation (WMI).' -ForegroundColor Red
+    Write-Host 'This helper could not identify this Windows installation. Ask an administrator to check Windows Management Instrumentation (WMI).' -ForegroundColor Red
     exit 1
 }
 
 if ($PSVersionTable.PSVersion -lt [version]'5.1') {
     Write-Host "Detected $windowsName with Windows PowerShell $($PSVersionTable.PSVersion)."
-    Write-Host 'Comnet needs Windows PowerShell 5.1. On Windows Server 2012 R2, ask your administrator to install Windows Management Framework 5.1, then reopen Setup-GUI.bat.' -ForegroundColor Yellow
+    Write-Host 'This helper needs Windows PowerShell 5.1. On Windows Server 2012 R2, ask your administrator to install Windows Management Framework 5.1, then reopen Setup-GUI.bat.' -ForegroundColor Yellow
     exit 1
 }
 
 $installation = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name InstallationType -ErrorAction SilentlyContinue).InstallationType
 if ($installation -eq 'Server Core') {
-    Write-Host "Detected $windowsName (Server Core). Comnet needs Windows Server with a graphical desktop." -ForegroundColor Yellow
+    Write-Host "Detected $windowsName (Server Core). This helper needs Windows Server with a graphical desktop." -ForegroundColor Yellow
     exit 1
 }
 
@@ -32,7 +32,7 @@ function Get-CompatibilityProblem($Windows) {
         if ([version]$Windows.Version -lt [version]'10.0' -or $Windows.Caption -notmatch '\b(Pro|Enterprise|Education)\b') {
             return 'Client setup needs Windows 10 or later Pro, Enterprise, or Education. Windows Home cannot join the domain.'
         }
-    } else { return 'Comnet could not identify a supported Windows Server or client edition.' }
+    } else { return 'This helper could not identify a supported Windows Server or client edition.' }
 }
 
 $configFile = Join-Path $PSScriptRoot 'setup-config.json'
@@ -46,7 +46,7 @@ if (Test-Path -LiteralPath $configFile) {
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Comnet Two-PC Lab" WindowStartupLocation="CenterScreen"
+        Title="P2P Server Client Setup" WindowStartupLocation="CenterScreen"
         SizeToContent="WidthAndHeight" ResizeMode="CanMinimize"
         Background="#F1F5F9" FontFamily="Segoe UI" FontSize="13"
         UseLayoutRounding="True" SnapsToDevicePixels="True">
@@ -114,7 +114,7 @@ if (Test-Path -LiteralPath $configFile) {
                 <TextBlock x:Name="RoleBadge" DockPanel.Dock="Right" VerticalAlignment="Center"
                            Foreground="#A5D6FF" FontWeight="SemiBold" Margin="14,0,0,0"/>
                 <StackPanel>
-                    <TextBlock Text="Comnet Two-PC Lab" Foreground="White" FontSize="22" FontWeight="SemiBold"/>
+                    <TextBlock Text="P2P Server Client Setup" Foreground="White" FontSize="22" FontWeight="SemiBold"/>
                     <TextBlock x:Name="ComputerDetails" Foreground="#CBD5E1" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
             </DockPanel>
@@ -187,7 +187,7 @@ if (Test-Path -LiteralPath $configFile) {
                 </Border>
             </Grid>
 
-            <TextBlock Text="Use an isolated Ethernet link. Save your work before starting. Windows may restart automatically."
+            <TextBlock Text="Connect just two lab PCs with a crossover Ethernet cable. Save your work before starting. Windows may restart automatically."
                        Foreground="#334155" TextWrapping="Wrap" Margin="0,10,0,8"/>
             <Grid>
                 <Grid.ColumnDefinitions>

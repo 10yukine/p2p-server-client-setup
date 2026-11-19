@@ -1,8 +1,14 @@
-# Comnet Two-PC Lab
+# P2P Server Client Setup
 
-Comnet Two-PC Lab is a Windows desktop helper for setting up an isolated Active Directory practice network. It guides one Windows Server and one Windows client from a direct Ethernet connection to a working domain and authenticated file sharing.
+P2P Server Client Setup is a Windows helper for an isolated two-PC networking lab. It connects one Windows Server and one Windows client directly over Ethernet, creates an Active Directory domain, and sets up a shared folder on each PC. Here, **P2P** means the two PCs connect directly and can access each other's shares. Active Directory still runs on the server.
 
-![Comnet Two-PC Lab on a Windows client](docs/gui.png)
+![P2P Server Client Setup on a Windows client](docs/gui.png)
+
+## Lab scope
+
+> **Use this helper with exactly two lab PCs connected directly by a crossover UTP Ethernet cable.** Disconnect Wi-Fi, VPNs, and other network links first. Keep the crossover cable off your office, school, and home networks.
+>
+> The helper replaces IPv4 settings on the selected adapter, assigns fixed IPs, and may restart Windows. It is intended for disposable or backed-up lab machines. Switch-based setups, shared networks, and deployments with more than two PCs are outside the recommended setup and have not been verified here.
 
 ## What it sets up
 
@@ -13,7 +19,7 @@ Comnet Two-PC Lab is a Windows desktop helper for setting up an isolated Active 
 
 ## Before you start
 
-- Use two test PCs on an isolated switch or a direct Ethernet link. Disconnect other network connections. The helper replaces the IPv4 settings on the chosen adapter.
+- Connect the two lab PCs directly using a tested crossover UTP Ethernet cable. Check the link lights on both PCs before opening the helper.
 - Use Windows Server with Desktop Experience and a client edition of Windows Pro, Enterprise, or Education. Both PCs need Windows PowerShell 5.1, working Ethernet drivers, and administrator access.
 - Open **Setup-GUI.bat** to check compatibility automatically. It shows the detected edition and enables the matching setup button. On Windows Server 2012 R2 with an earlier PowerShell version, it explains that Windows Management Framework 5.1 is required before setup can start.
 - Name the PCs before creating or joining the domain. `SERVER01` and `CLIENT01` work well.

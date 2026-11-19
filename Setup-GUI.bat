@@ -1,7 +1,7 @@
 @echo off
 setlocal
-title Comnet Two-PC Lab
-echo Comnet is checking Windows compatibility and looking for drives and Ethernet adapters.
+title P2P Server Client Setup
+echo Checking Windows compatibility and looking for drives and Ethernet adapters.
 echo Please wait. These checks may take a moment before the setup window appears.
 echo.
 cd /d "%SystemRoot%"

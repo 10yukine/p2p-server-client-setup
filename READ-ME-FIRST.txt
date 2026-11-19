@@ -1,7 +1,8 @@
-COMNET TWO-PC LAB | START HERE
+P2P SERVER CLIENT SETUP | START HERE
 
 1. Prepare both PCs
-   Connect both PCs to an isolated Ethernet cable or switch and save your work.
+   Connect exactly two lab PCs directly with a tested crossover UTP cable.
+   Disconnect Wi-Fi, VPNs, and other network links. Save your work.
    The server uses 192.168.1.1 and the client uses 192.168.1.2.
    Use Windows Server on SERVER01 and Windows Pro or equivalent on CLIENT01.
    This helper needs Windows PowerShell 5.1.
