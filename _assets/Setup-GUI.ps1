@@ -1,6 +1,39 @@
-﻿#Requires -Version 5.1
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+﻿$ErrorActionPreference = 'Stop'
+try {
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem
+    $windowsName = $os.Caption -replace '^Microsoft\s+', ''
+} catch {
+    Write-Host 'Comnet could not identify this Windows installation. Ask an administrator to check Windows Management Instrumentation (WMI).' -ForegroundColor Red
+    exit 1
+}
+
+if ($PSVersionTable.PSVersion -lt [version]'5.1') {
+    Write-Host "Detected $windowsName with Windows PowerShell $($PSVersionTable.PSVersion)."
+    Write-Host 'Comnet needs Windows PowerShell 5.1. On Windows Server 2012 R2, ask your administrator to install Windows Management Framework 5.1, then reopen Setup-GUI.bat.' -ForegroundColor Yellow
+    exit 1
+}
+
+$installation = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name InstallationType -ErrorAction SilentlyContinue).InstallationType
+if ($installation -eq 'Server Core') {
+    Write-Host "Detected $windowsName (Server Core). Comnet needs Windows Server with a graphical desktop." -ForegroundColor Yellow
+    exit 1
+}
+
+try { Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase }
+catch {
+    Write-Host "Detected $windowsName, but the Windows desktop libraries could not load. Ask your administrator to check the graphical desktop and .NET Framework installation." -ForegroundColor Red
+    exit 1
+}
+
+function Get-CompatibilityProblem($Windows) {
+    if ($Windows.ProductType -in 2,3) {
+        if ([version]$Windows.Version -lt [version]'6.3') { return 'This server is too old for setup. Use Windows Server 2012 R2 or later.' }
+    } elseif ($Windows.ProductType -eq 1) {
+        if ([version]$Windows.Version -lt [version]'10.0' -or $Windows.Caption -notmatch '\b(Pro|Enterprise|Education)\b') {
+            return 'Client setup needs Windows 10 or later Pro, Enterprise, or Education. Windows Home cannot join the domain.'
+        }
+    } else { return 'Comnet could not identify a supported Windows Server or client edition.' }
+}
 
 $configFile = Join-Path $PSScriptRoot 'setup-config.json'
 $settings = $null
@@ -174,8 +207,7 @@ if (Test-Path -LiteralPath $configFile) {
                 <TextBlock DockPanel.Dock="Right" Margin="14,0,0,0" VerticalAlignment="Center">
                     <Hyperlink x:Name="CreditLink" Foreground="#1D4ED8" NavigateUri="https://github.com/10yukine">By @10yukine</Hyperlink>
                 </TextBlock>
-                <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="#334155" VerticalAlignment="Center"
-                           AutomationProperties.LiveSetting="Polite"/>
+                <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="#334155" VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
     </StackPanel>
@@ -220,12 +252,14 @@ function Refresh-Hardware {
     })
     $AdapterBox.SelectedItem = $AdapterBox.Items | Where-Object { [string]$_.InterfaceGuid -eq $selectedAdapter } | Select-Object -First 1
     if ($AdapterBox.SelectedIndex -lt 0 -and $AdapterBox.Items.Count -eq 1) { $AdapterBox.SelectedIndex = 0 }
-    if (-not $AdapterBox.Items.Count) { Set-Status 'Connect the lab Ethernet cable, then click Refresh.' -Problem }
+    if ($compatibilityProblem) { Set-Status $compatibilityProblem -Problem }
+    elseif (-not $AdapterBox.Items.Count) { Set-Status 'Connect the lab Ethernet cable, then click Refresh.' -Problem }
     else { Set-Status 'Set up the server first. Wait for SERVER READY before setting up the client.' }
     Update-Preview
 }
 
 function Start-LabSetup([ValidateSet('Server','Client')][string]$Role) {
+    if ($compatibilityProblem) { Set-Status $compatibilityProblem -Problem; return }
     $domain = $DomainBox.Text.Trim().TrimEnd('.').ToLowerInvariant()
     $netbios = $ShortBox.Text.Trim().ToUpperInvariant()
     $shareName = $ShareBox.Text.Trim()
@@ -273,16 +307,12 @@ $ShortBox.Text = if ($settings.NetBIOS) { $settings.NetBIOS } else { 'CSSTRAININ
 $ShareBox.Text = if ($settings.ShareName) { $settings.ShareName } else { 'PCShare' }
 $DiscoveryBox.IsChecked = if ($settings -and $settings.PSObject.Properties['Discovery']) { [bool]$settings.Discovery } else { $true }
 $EjectBox.IsChecked = if ($settings -and $settings.PSObject.Properties['EjectUsb']) { [bool]$settings.EjectUsb } else { $true }
-$detectedRole = $null
-try {
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem
-    $detectedRole = if ([int]$os.ProductType -eq 1) { 'Client' } else { 'Server' }
-    $RoleBadge.Text = "$detectedRole PC"
-    $ComputerDetails.Text = "$env:COMPUTERNAME | $($os.Caption -replace '^Microsoft\s+', '')"
-    $ServerButton.IsEnabled = $detectedRole -eq 'Server'
-    $ClientButton.IsEnabled = $detectedRole -eq 'Client'
-}
-catch { $ComputerDetails.Text = $env:COMPUTERNAME }
+$detectedRole = if ($os.ProductType -eq 1) { 'Client' } elseif ($os.ProductType -in 2,3) { 'Server' }
+$compatibilityProblem = Get-CompatibilityProblem $os
+$RoleBadge.Text = if ($compatibilityProblem) { 'Setup unavailable' } else { "$detectedRole PC" }
+$ComputerDetails.Text = "$env:COMPUTERNAME | $windowsName"
+$ServerButton.IsEnabled = -not $compatibilityProblem -and $detectedRole -eq 'Server'
+$ClientButton.IsEnabled = -not $compatibilityProblem -and $detectedRole -eq 'Client'
 
 $DomainBox.Add_TextChanged({ Update-Preview })
 $ShortBox.Add_TextChanged({ Update-Preview })
@@ -299,7 +329,7 @@ $CreditLink.Add_RequestNavigate({
 })
 
 Refresh-Hardware
-if ($configNotice) { Set-Status $configNotice -Problem }
+if ($configNotice -and -not $compatibilityProblem) { Set-Status $configNotice -Problem }
 
 # Size to the content and scale down only when the Windows work area is smaller.
 $Page.Measure([Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity))

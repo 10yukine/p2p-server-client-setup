@@ -15,6 +15,7 @@ Comnet Two-PC Lab is a Windows desktop helper for setting up an isolated Active 
 
 - Use two test PCs on an isolated switch or a direct Ethernet link. Disconnect other network connections. The helper replaces the IPv4 settings on the chosen adapter.
 - Use Windows Server with Desktop Experience and a client edition of Windows Pro, Enterprise, or Education. Both PCs need Windows PowerShell 5.1, working Ethernet drivers, and administrator access.
+- Open **Setup-GUI.bat** to check compatibility automatically. It shows the detected edition and enables the matching setup button. On Windows Server 2012 R2 with an earlier PowerShell version, it explains that Windows Management Framework 5.1 is required before setup can start.
 - Name the PCs before creating or joining the domain. `SERVER01` and `CLIENT01` work well.
 - Save open work. Domain setup may restart Windows automatically.
 
