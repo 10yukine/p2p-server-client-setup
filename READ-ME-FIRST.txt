@@ -1,0 +1,46 @@
+COMNET TWO-PC LAB | START HERE
+
+1. Prepare both PCs
+   Connect both PCs to an isolated Ethernet cable or switch and save your work.
+   The server uses 192.168.1.1 and the client uses 192.168.1.2.
+   Use Windows Server on SERVER01 and Windows Pro or equivalent on CLIENT01.
+   This helper needs Windows PowerShell 5.1.
+
+2. Set up SERVER01
+   Open Setup-GUI.bat. Choose your domain, short name, lab Ethernet adapter,
+   share name and drive. Click Set up server.
+   Approve Windows administrator access. Enter the recovery password if asked.
+   If Windows restarts, sign in as your domain Administrator. Setup resumes.
+   If the role install needs an earlier restart, the screen says to use the
+   local Administrator. Create the shareuser password if asked.
+   Wait for SERVER READY and leave SERVER01 running.
+
+3. Set up CLIENT01
+   Move the USB to CLIENT01 after Windows confirms you can remove it.
+   Open Setup-GUI.bat with the same domain and short name. Click Set up client.
+   Enter the server Administrator password.
+   If Windows restarts, sign in as domain Administrator. Setup resumes.
+   Wait for CLIENT READY.
+
+4. Open the other PC's folder
+   In Explorer, open Network and select the other computer.
+   If Network takes time to refresh, paste the direct address instead.
+   On CLIENT01 open \\192.168.1.1
+   On SERVER01 open \\192.168.1.2
+   Sign in as YOURSHORTNAME\shareuser if asked. Open the configured share
+   and create a test file. Repeat from the other PC.
+
+If an empty folder is left behind by an older run, choose its drive and name,
+then select Reuse an empty leftover share folder. For an existing share,
+select its original drive and name. Keep any existing data on that drive.
+Choose a new name to create another share.
+
+The restart uses a temporary Task Scheduler entry named Two-PC Lab - Resume
+Setup and protected files in Program Files. After successful setup the helper
+removes its task and staging files and leaves a summary under ProgramData.
+Save the error message and recovery path if setup stops. Fix the cause and
+rerun from USB. If Windows leaves the USB connected, use Safely Remove Hardware.
+For an already joined lab, enter the existing domain name and short name.
+
+Credits
+@10yukine | https://github.com/10yukine
