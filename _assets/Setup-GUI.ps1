@@ -264,7 +264,7 @@ function Start-LabSetup([ValidateSet('Server','Client')][string]$Role) {
     $netbios = $ShortBox.Text.Trim().ToUpperInvariant()
     $shareName = $ShareBox.Text.Trim()
     if ($domain -notmatch '^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$') {
-        Set-Status 'Enter a DNS domain such as ieti.local.' -Problem
+        Set-Status 'Enter a DNS domain such as server.local.' -Problem
         [void]$DomainBox.Focus()
         return
     }

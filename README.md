@@ -29,7 +29,7 @@ Comnet Two-PC Lab is a Windows desktop helper for setting up an isolated Active 
 ## Quick start
 
 1. Download the repository from **Code → Download ZIP** and extract it to a USB or local folder. Keep `Setup-GUI.bat` beside `_assets`.
-2. Open **Setup-GUI.bat** on the server. Choose the DNS domain, short name, connected Ethernet adapter, share name, and an NTFS drive. For example, use `ieti.local`, `IETI`, and `PCShare`. Click **Set up server**.
+2. Open **Setup-GUI.bat** on the server. Choose the DNS domain, short name, connected Ethernet adapter, share name, and an NTFS drive. For example, use `server.local`, `SERVER`, and `PCShare`. Click **Set up server**.
 3. Follow the password and sign-in prompts. After a restart, sign in with the account shown in the setup window. Wait for **SERVER READY** and leave the server running.
 4. Open the helper on the client with the same domain and short name. Click **Set up client**, then use the server’s domain Administrator credentials to join. Sign in as a domain administrator after restart and wait for **CLIENT READY**.
 5. Test access from both machines. In File Explorer, open `\\192.168.1.1\PCShare` on the client and `\\192.168.1.2\PCShare` on the server. Replace `PCShare` if you chose another share name. If prompted, use the domain’s `shareuser` account.
