@@ -9,7 +9,9 @@ jobs:
   powershell-4:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Check the Server 2012 R2 compatibility profile
         shell: powershell
         run: |
