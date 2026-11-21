@@ -63,7 +63,9 @@ If your PC blocks an unsigned PowerShell script, follow your organization’s po
 
 ## How it works
 
-`Setup-GUI.bat` opens the WPF interface in `_assets/Setup-GUI.ps1`. The GUI saves the selected settings locally and launches `_assets/Run-Setup.ps1` with administrator approval. Passwords are entered interactively and stay out of the saved settings. The worker uses Windows services and administrative commands for network configuration, AD DS, SMB, and Task Scheduler.
+`Setup-GUI.bat` opens the WPF interface in `_assets/Setup-GUI.ps1`. Edits autosave to `_assets/setup-config.json` beside the scripts after a short pause. In **Lab options**, click **Apply lab options** to save. Close the GUI and safely eject the USB before moving it to the next PC. Confirm the local Ethernet adapter and share drive there.
+
+The GUI launches `_assets/Run-Setup.ps1` with administrator approval. Passwords are entered interactively and stay out of the saved settings. The worker uses Windows services and administrative commands for network configuration, AD DS, SMB, and Task Scheduler.
 
 After success, the helper removes its temporary resume task and staged files and leaves a summary under `%ProgramData%`. A failed run can leave some changes in place, so read its recovery message before retrying. The static addresses are for a two-PC lab. Use separate deployment planning and addressing for more machines.
 

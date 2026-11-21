@@ -1,4 +1,5 @@
 _assets/setup-config.json
+_assets/setup-config.json.*.tmp
 *.log
 Thumbs.db
 Desktop.ini

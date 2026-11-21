@@ -37,7 +37,7 @@ $configFile = Join-Path $PSScriptRoot 'setup-config.json'
 $settings = $null
 $configNotice = $null
 if (Test-Path -LiteralPath $configFile) {
-    try { $settings = Get-Content -LiteralPath $configFile -Raw | ConvertFrom-Json }
+    try { $settings = Get-Content -LiteralPath $configFile -Raw -Encoding UTF8 | ConvertFrom-Json }
     catch { $configNotice = 'Saved settings could not be read. Check the defaults before starting.' }
 }
 $script:lab = Read-LabOptions $settings.Lab
@@ -210,6 +210,7 @@ $script:lab = Read-LabOptions $settings.Lab
                 <TextBlock DockPanel.Dock="Right" Margin="14,0,0,0" VerticalAlignment="Center">
                     <Hyperlink x:Name="CreditLink" Foreground="#1D4ED8" NavigateUri="https://github.com/10yukine">By @10yukine</Hyperlink>
                 </TextBlock>
+                <TextBlock x:Name="SaveStatus" DockPanel.Dock="Right" Margin="14,0,0,0" VerticalAlignment="Center"/>
                 <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="#334155" VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
@@ -221,7 +222,7 @@ $reader = New-Object System.Xml.XmlNodeReader($xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
 foreach ($id in 'Page','RoleBadge','ComputerDetails','DomainBox','ShortBox','LoginPreview','ShareBox',
     'DriveBox','SharePreview','AdapterBox','RefreshButton','DiscoveryBox','RepairBox','EjectBox',
-    'ServerButton','ClientButton','CreditLink','StatusText','LabOptionsButton','LabSummary') {
+    'ServerButton','ClientButton','CreditLink','StatusText','SaveStatus','LabOptionsButton','LabSummary') {
     Set-Variable -Name $id -Value $window.FindName($id)
 }
 
@@ -354,6 +355,7 @@ function Show-LabOptions {
         Update-LabSummary
         Update-Preview
         Set-Status 'Lab options applied. Both PCs must use the same network settings.'
+        Queue-SettingsSave
     }
 }
 
@@ -393,6 +395,53 @@ function Refresh-Hardware {
     Update-Preview
 }
 
+function Get-SetupSettings {
+    @{
+        Domain = $DomainBox.Text; NetBIOS = $ShortBox.Text; ShareDrive = $DriveBox.SelectedItem.Letter
+        ShareName = $ShareBox.Text; Adapter = [string]$AdapterBox.SelectedItem.InterfaceGuid
+        Discovery = [bool]$DiscoveryBox.IsChecked; ReuseEmpty = [bool]$RepairBox.IsChecked
+        EjectUsb = [bool]$EjectBox.IsChecked
+        Lab = $script:lab
+    }
+}
+
+function Save-SetupSettings([hashtable]$Current) {
+    $saveTimer.Stop()
+    $temp = "$configFile.$([guid]::NewGuid()).tmp"
+    try {
+        $json = $Current | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText($temp, $json)
+        if ([IO.File]::Exists($configFile)) {
+            [IO.File]::Replace($temp, $configFile, [System.Management.Automation.Language.NullString]::Value, $true)
+        } else {
+            [IO.File]::Move($temp, $configFile)
+        }
+        $script:settingsPending = $false
+        $SaveStatus.Text = 'Settings saved'
+        $SaveStatus.Foreground = [Windows.Media.Brushes]::DarkSlateGray
+        $SaveStatus.ToolTip = $configFile
+    } catch {
+        $SaveStatus.Text = 'Settings could not save'
+        $SaveStatus.Foreground = [Windows.Media.Brushes]::Firebrick
+        $SaveStatus.ToolTip = $_.Exception.Message
+        throw
+    } finally {
+        if ([IO.File]::Exists($temp)) {
+            Remove-Item -LiteralPath $temp -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Queue-SettingsSave {
+    if ($script:refreshingHardware) { return }
+    $script:settingsPending = $true
+    $SaveStatus.Text = 'Saving settings...'
+    $SaveStatus.Foreground = [Windows.Media.Brushes]::DarkSlateGray
+    $SaveStatus.ToolTip = $configFile
+    $saveTimer.Stop()
+    $saveTimer.Start()
+}
+
 function Start-LabSetup([ValidateSet('Server','Client')][string]$Role) {
     if ($compatibilityProblem) { Set-Status $compatibilityProblem -Problem; return }
     $domain = $DomainBox.Text.Trim().TrimEnd('.').ToLowerInvariant()
@@ -422,15 +471,12 @@ function Start-LabSetup([ValidateSet('Server','Client')][string]$Role) {
     }
     $worker = Join-Path $PSScriptRoot 'Run-Setup.ps1'
     if (-not (Test-Path -LiteralPath $worker -PathType Leaf)) { Set-Status 'Run-Setup.ps1 is missing from _assets.' -Problem; return }
-    $current = @{
-        Domain = $domain; NetBIOS = $netbios; ShareDrive = $DriveBox.SelectedItem.Letter
-        ShareName = $shareName; Adapter = [string]$AdapterBox.SelectedItem.InterfaceGuid
-        Discovery = [bool]$DiscoveryBox.IsChecked; ReuseEmpty = [bool]$RepairBox.IsChecked
-        EjectUsb = [bool]$EjectBox.IsChecked
-        Lab = $script:lab
-    }
+    $current = Get-SetupSettings
+    $current.Domain = $domain
+    $current.NetBIOS = $netbios
+    $current.ShareName = $shareName
     try {
-        $current | ConvertTo-Json -Compress | Set-Content -LiteralPath $configFile -Encoding ASCII
+        Save-SetupSettings $current
         $arguments = '-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File "' + $worker + '" -Role ' + $Role
         Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -WorkingDirectory $env:SystemRoot -Verb RunAs
         $window.Close()
@@ -438,10 +484,11 @@ function Start-LabSetup([ValidateSet('Server','Client')][string]$Role) {
     catch { Set-Status "Setup could not start. $($_.Exception.Message)" -Problem }
 }
 
-$DomainBox.Text = if ($settings.Domain) { $settings.Domain } else { 'csstraining.com' }
-$ShortBox.Text = if ($settings.NetBIOS) { $settings.NetBIOS } else { 'CSSTRAINING' }
-$ShareBox.Text = if ($settings.ShareName) { $settings.ShareName } else { 'PCShare' }
+$DomainBox.Text = if ($settings -and $settings.PSObject.Properties['Domain']) { [string]$settings.Domain } else { 'server.local' }
+$ShortBox.Text = if ($settings -and $settings.PSObject.Properties['NetBIOS']) { [string]$settings.NetBIOS } else { 'SERVER' }
+$ShareBox.Text = if ($settings -and $settings.PSObject.Properties['ShareName']) { [string]$settings.ShareName } else { 'PCShare' }
 $DiscoveryBox.IsChecked = if ($settings -and $settings.PSObject.Properties['Discovery']) { [bool]$settings.Discovery } else { $true }
+$RepairBox.IsChecked = [bool]$settings.ReuseEmpty
 $EjectBox.IsChecked = if ($settings -and $settings.PSObject.Properties['EjectUsb']) { [bool]$settings.EjectUsb } else { $true }
 $detectedRole = if ($os.ProductType -eq 1) { 'Client' } elseif ($os.ProductType -in 2,3) { 'Server' }
 $compatibilityProblem = Get-CompatibilityProblem $os
@@ -450,11 +497,39 @@ $ComputerDetails.Text = "$env:COMPUTERNAME | $windowsName"
 $ServerButton.IsEnabled = -not $compatibilityProblem -and $detectedRole -eq 'Server'
 $ClientButton.IsEnabled = -not $compatibilityProblem -and $detectedRole -eq 'Client'
 
-$DomainBox.Add_TextChanged({ Update-Preview })
-$ShortBox.Add_TextChanged({ Update-Preview })
-$ShareBox.Add_TextChanged({ Update-Preview })
-$DriveBox.Add_SelectionChanged({ Update-Preview })
-$RefreshButton.Add_Click({ Refresh-Hardware })
+$saveTimer = New-Object System.Windows.Threading.DispatcherTimer
+$saveTimer.Interval = [TimeSpan]::FromMilliseconds(350)
+$saveTimer.Add_Tick({
+    try { Save-SetupSettings (Get-SetupSettings) }
+    catch { } # Save-SetupSettings already displays the error beside the save indicator.
+})
+$window.Add_Closing({
+    param($sender, $eventArgs)
+    if (-not $script:settingsPending) { return }
+    try { Save-SetupSettings (Get-SetupSettings) }
+    catch {
+        $answer = [Windows.MessageBox]::Show($window,
+            "Could not save settings. Check that the setup drive is connected and writable.`n`nClose with unsaved changes?",
+            'Unsaved settings', 'YesNo', 'Warning', 'No')
+        $eventArgs.Cancel = $answer -ne 'Yes'
+    }
+})
+
+foreach ($box in $DomainBox,$ShortBox,$ShareBox) {
+    $box.Add_TextChanged({ Update-Preview; Queue-SettingsSave })
+}
+$DriveBox.Add_SelectionChanged({ Update-Preview; Queue-SettingsSave })
+$AdapterBox.Add_SelectionChanged({ Queue-SettingsSave })
+foreach ($box in $DiscoveryBox,$RepairBox,$EjectBox) {
+    $box.Add_Checked({ Queue-SettingsSave })
+    $box.Add_Unchecked({ Queue-SettingsSave })
+}
+$RefreshButton.Add_Click({
+    $script:refreshingHardware = $true
+    try { Refresh-Hardware }
+    finally { $script:refreshingHardware = $false }
+    Queue-SettingsSave
+})
 $LabOptionsButton.Add_Click({ Show-LabOptions })
 $ServerButton.Add_Click({ Start-LabSetup 'Server' })
 $ClientButton.Add_Click({ Start-LabSetup 'Client' })
@@ -465,7 +540,9 @@ $CreditLink.Add_RequestNavigate({
     catch { Set-Status "Could not open GitHub. $($_.Exception.Message)" -Problem }
 })
 
-Refresh-Hardware
+$script:refreshingHardware = $true
+try { Refresh-Hardware }
+finally { $script:refreshingHardware = $false }
 Update-LabSummary
 if ($configNotice -and -not $compatibilityProblem) { Set-Status $configNotice -Problem }
 

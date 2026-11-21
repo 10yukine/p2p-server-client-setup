@@ -21,6 +21,8 @@ P2P SERVER CLIENT SETUP | START HERE
 
 3. Set up CLIENT01
    Move the USB to CLIENT01 after Windows confirms you can remove it.
+   GUI edits autosave to the USB. In Lab options, click Apply lab options.
+   Close the GUI before ejecting. Confirm the local adapter and drive on CLIENT01.
    Open Setup-GUI.bat with the same domain and short name. Click Set up client.
    Check that Lab options shows the same addresses as on the server.
    Enter the server Administrator password when asked to join.

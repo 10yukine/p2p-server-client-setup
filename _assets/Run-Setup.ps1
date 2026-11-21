@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 $taskName = 'Two-PC Lab - Resume Setup'
 $cfgPath = Join-Path $PSScriptRoot 'setup-config.json'
 try {
-    $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
+    $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
     if (-not $cfg) { throw 'The settings file is empty.' }
 } catch {
     Write-Host 'SETUP STOPPED | Open Setup-GUI.bat to create valid setup settings.' -ForegroundColor Red

@@ -24,7 +24,7 @@ Use two isolated PCs connected directly by crossover UTP. The helper replaces IP
 | Basic sharing | Optional. Folder redirection uses its own dedicated share. |
 | Lab password rules | Enable only for new lab accounts if both password settings are required. |
 
-Click **Apply lab options** and **Set up server**. Starting setup saves the options locally. Use the same USB on the client and confirm the same domain, address settings, and options before clicking **Set up client**.
+Click **Apply lab options** to save the lab settings to the USB, then click **Set up server**. The same USB carries your domain, address settings, and options to the client. Confirm the client’s adapter and share drive before clicking **Set up client**.
 
 ## Password prompts
 
