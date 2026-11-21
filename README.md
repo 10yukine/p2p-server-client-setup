@@ -8,13 +8,15 @@ P2P Server Client Setup is a Windows helper for an isolated two-PC networking la
 
 > **Use this helper with exactly two lab PCs connected directly by a crossover UTP Ethernet cable.** Disconnect Wi-Fi, VPNs, and other network links first. Keep the crossover cable off your office, school, and home networks.
 >
-> The helper replaces IPv4 settings on the selected adapter, assigns fixed IPs, and may restart Windows. It is intended for disposable or backed-up lab machines. Switch-based setups, shared networks, and deployments with more than two PCs are outside the recommended setup and have not been verified here.
+> The helper replaces IPv4 settings on the selected adapter, assigns the configured static IPs, and may restart Windows. It is intended for disposable or backed-up lab machines. Switch-based setups, shared networks, and deployments with more than two PCs are outside the recommended setup and have not been verified here.
 
 ## What it sets up
 
 - A domain controller with AD DS and DNS on the server, then a domain join on the client.
 - A folder shared by each PC over SMB, with access for a dedicated domain group.
 - Optional discovery in File Explorer and safe USB ejection when Windows supports it.
+- Editable IPv4 addresses, subnet prefix, and optional gateway. Both PCs use the server as their DNS server.
+- Optional server DHCP scope, organizational unit (OU), and lab users. Existing user passwords are kept.
 - Automatic restarts where required, with a temporary scheduled task that resumes setup after an administrator signs in.
 
 ## Before you start
@@ -25,7 +27,7 @@ P2P Server Client Setup is a Windows helper for an isolated two-PC networking la
 - Name the PCs before creating or joining the domain. `SERVER01` and `CLIENT01` work well.
 - Save open work. Domain setup may restart Windows automatically.
 
-| Setting | Server | Client |
+| Default setting | Server | Client |
 | --- | --- | --- |
 | IPv4 | 192.168.1.1 | 192.168.1.2 |
 | Subnet mask | 255.255.255.0 | 255.255.255.0 |
@@ -41,6 +43,8 @@ P2P Server Client Setup is a Windows helper for an isolated two-PC networking la
 5. Test access from both machines. In File Explorer, open `\\192.168.1.1\PCShare` on the client and `\\192.168.1.2\PCShare` on the server. Replace `PCShare` if you chose another share name. If prompted, use the domain’s `shareuser` account.
 
 Create a disposable file in each remote share and check that it appears on the other PC. The shares are separate folders.
+
+For a custom network or classroom assessment, open **Lab options** before starting and use the same values on both PCs. See the [assessment walkthrough](docs/assessment.md) for sample settings, password prompt illustrations, and the manual Folder Redirection and Windows Server Backup steps.
 
 ## Troubleshooting
 
@@ -58,7 +62,7 @@ If your PC blocks an unsigned PowerShell script, follow your organization’s po
 
 `Setup-GUI.bat` opens the WPF interface in `_assets/Setup-GUI.ps1`. The GUI saves the selected settings locally and launches `_assets/Run-Setup.ps1` with administrator approval. Passwords are entered interactively and stay out of the saved settings. The worker uses Windows services and administrative commands for network configuration, AD DS, SMB, and Task Scheduler.
 
-After success, the helper removes its temporary resume task and staged files and leaves a summary under `%ProgramData%`. A failed run can leave some changes in place, so read its recovery message before retrying. These fixed IP addresses are for a two-PC lab. Use separate deployment planning and addressing for more machines.
+After success, the helper removes its temporary resume task and staged files and leaves a summary under `%ProgramData%`. A failed run can leave some changes in place, so read its recovery message before retrying. The static addresses are for a two-PC lab. Use separate deployment planning and addressing for more machines.
 
 ## Credits
 

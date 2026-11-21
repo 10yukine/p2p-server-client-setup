@@ -35,6 +35,7 @@ function Get-CompatibilityProblem($Windows) {
     } else { return 'This helper could not identify a supported Windows Server or client edition.' }
 }
 
+. (Join-Path $PSScriptRoot 'Lab-Options.ps1')
 $configFile = Join-Path $PSScriptRoot 'setup-config.json'
 $settings = $null
 $configNotice = $null
@@ -42,6 +43,7 @@ if (Test-Path -LiteralPath $configFile) {
     try { $settings = Get-Content -LiteralPath $configFile -Raw | ConvertFrom-Json }
     catch { $configNotice = 'Saved settings could not be read. Check the defaults before starting.' }
 }
+$script:lab = Read-LabOptions $settings.Lab
 
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -187,6 +189,10 @@ if (Test-Path -LiteralPath $configFile) {
                 </Border>
             </Grid>
 
+            <DockPanel Margin="0,10,0,0">
+                <Button x:Name="LabOptionsButton" DockPanel.Dock="Right" Padding="10,4" Content="_Lab options"/>
+                <TextBlock x:Name="LabSummary" Foreground="#334155" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,10,0"/>
+            </DockPanel>
             <TextBlock Text="Connect just two lab PCs with a crossover Ethernet cable. Save your work before starting. Windows may restart automatically."
                        Foreground="#334155" TextWrapping="Wrap" Margin="0,10,0,8"/>
             <Grid>
@@ -218,8 +224,99 @@ $reader = New-Object System.Xml.XmlNodeReader($xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
 foreach ($id in 'Page','RoleBadge','ComputerDetails','DomainBox','ShortBox','LoginPreview','ShareBox',
     'DriveBox','SharePreview','AdapterBox','RefreshButton','DiscoveryBox','RepairBox','EjectBox',
-    'ServerButton','ClientButton','CreditLink','StatusText') {
+    'ServerButton','ClientButton','CreditLink','StatusText','LabOptionsButton','LabSummary') {
     Set-Variable -Name $id -Value $window.FindName($id)
+}
+
+function Update-LabSummary {
+    $ServerButton.Content = "Set up _server   $($script:lab.ServerIP)"
+    $ClientButton.Content = "Set up _client   $($script:lab.ClientIP)"
+    $LabSummary.Text = "Prefix /$($script:lab.Prefix)   |   DNS $($script:lab.ServerIP)   |   OU " +
+        $(if ($script:lab.OU) { $script:lab.OU } else { 'none' })
+}
+
+function Show-LabOptions {
+    $dialog = [Windows.Window]::new()
+    $dialog.Title = 'Lab options'
+    $dialog.Owner = $window
+    $dialog.WindowStartupLocation = 'CenterOwner'
+    $dialog.SizeToContent = 'WidthAndHeight'
+    $dialog.ResizeMode = 'NoResize'
+    $dialog.FontFamily = $window.FontFamily
+    $dialog.FontSize = $window.FontSize
+    $panel = [Windows.Controls.StackPanel]::new()
+    $panel.Width = 620
+    $panel.Margin = [Windows.Thickness]::new(16)
+    $dialog.Content = $panel
+    $controls = @{}
+    $pairs = @(
+        @('ServerIP','Server IPv4','ClientIP','Client IPv4'),
+        @('Prefix','Subnet prefix (24 = 255.255.255.0)','Gateway','Gateway (optional)'),
+        @('OU','OU name (optional)','Users','Users: Display Name:login, separated by commas'),
+        @('RangeStart','DHCP range start','RangeEnd','DHCP range end'),
+        @('ScopeName','DHCP scope name')
+    )
+    foreach ($pair in $pairs) {
+        $row = [Windows.Controls.Primitives.UniformGrid]::new()
+        $row.Columns = 2
+        [void]$panel.Children.Add($row)
+        for ($i=0; $i -lt $pair.Count; $i+=2) {
+            $field = [Windows.Controls.StackPanel]::new()
+            $field.Margin = [Windows.Thickness]::new(0,0,8,8)
+            $label = [Windows.Controls.Label]::new()
+            $label.Padding = [Windows.Thickness]::new(0,0,0,3)
+            $label.Content = $pair[$i+1]
+            $box = [Windows.Controls.TextBox]::new()
+            $box.MinHeight = 26
+            $box.Text = [string]$script:lab[$pair[$i]]
+            $label.Target = $box
+            $controls[$pair[$i]] = $box
+            [void]$field.Children.Add($label)
+            [void]$field.Children.Add($box)
+            [void]$row.Children.Add($field)
+        }
+    }
+    foreach ($option in @(
+        @('CreateShare','Create the basic file share on both PCs'),
+        @('DHCP','Install and configure IPv4 DHCP on the server'),
+        @('LabPasswordRules','For new lab users: passwords never expire and users cannot change them')
+    )) {
+        $box = [Windows.Controls.CheckBox]::new()
+        $box.Content = $option[1]
+        $box.IsChecked = [bool]$script:lab[$option[0]]
+        $box.Margin = [Windows.Thickness]::new(0,3,0,3)
+        $controls[$option[0]] = $box
+        [void]$panel.Children.Add($box)
+    }
+    $tip = [Windows.Controls.TextBlock]::new()
+    $tip.Text = 'Both PCs use the server IP for DNS. Leave the gateway blank if there is no router. The client stays static until you switch it to automatic for a DHCP demonstration.'
+    $tip.TextWrapping = 'Wrap'
+    $tip.Margin = [Windows.Thickness]::new(0,8,0,8)
+    [void]$panel.Children.Add($tip)
+    $save = [Windows.Controls.Button]::new()
+    $save.Content = 'Apply lab options'
+    $save.IsDefault = $true
+    $save.MinHeight = 30
+    [void]$panel.Children.Add($save)
+    $save.Add_Click({ $dialog.DialogResult = $true }.GetNewClosure())
+    $panel.Measure([Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity))
+    $work = [Windows.SystemParameters]::WorkArea
+    $factor = [math]::Min(1.0,[math]::Min(($work.Width-28)/$panel.DesiredSize.Width,($work.Height-56)/$panel.DesiredSize.Height))
+    if ($factor -lt 1) { $panel.LayoutTransform = [Windows.Media.ScaleTransform]::new($factor,$factor) }
+    # A Window instance can only be shown once. Validate before accepting its values.
+    if ($dialog.ShowDialog()) {
+        $candidate = @{}
+        foreach ($key in $controls.Keys) {
+            $candidate[$key] = if ($controls[$key] -is [Windows.Controls.CheckBox]) { [bool]$controls[$key].IsChecked } else { $controls[$key].Text.Trim() }
+        }
+        try {
+            [void](Confirm-LabOptions $candidate)
+            $script:lab = $candidate
+            Update-LabSummary
+            Update-Preview
+            Set-Status 'Lab options applied. Both PCs must use the same network settings.'
+        } catch { Set-Status $_.Exception.Message -Problem }
+    }
 }
 
 function Set-Status([string]$Message, [switch]$Problem) {
@@ -273,13 +370,13 @@ function Start-LabSetup([ValidateSet('Server','Client')][string]$Role) {
         [void]$ShortBox.Focus()
         return
     }
-    if ($shareName -notmatch '^[a-z0-9][a-z0-9 _-]{0,39}$' -or
-        $shareName -match '^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|Windows|Users|Program Files|Program Files \(x86\)|ProgramData|Recovery)$') {
+    if ($script:lab.CreateShare -and ($shareName -notmatch '^[a-z0-9][a-z0-9 _-]{0,39}$' -or
+        $shareName -match '^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|Windows|Users|Program Files|Program Files \(x86\)|ProgramData|Recovery)$')) {
         Set-Status 'Choose a share name with letters, numbers, spaces, hyphens or underscores.' -Problem
         [void]$ShareBox.Focus()
         return
     }
-    if (-not $DriveBox.SelectedItem) { Set-Status 'Select a local NTFS drive.' -Problem; [void]$DriveBox.Focus(); return }
+    if ($script:lab.CreateShare -and -not $DriveBox.SelectedItem) { Set-Status 'Select a local NTFS drive.' -Problem; [void]$DriveBox.Focus(); return }
     if (-not $AdapterBox.SelectedItem) { Set-Status 'Select the connected lab Ethernet adapter.' -Problem; [void]$AdapterBox.Focus(); return }
     if ($detectedRole -and $Role -ne $detectedRole) {
         Set-Status "This PC runs the $detectedRole edition of Windows. Choose $detectedRole setup." -Problem
@@ -292,6 +389,7 @@ function Start-LabSetup([ValidateSet('Server','Client')][string]$Role) {
         ShareName = $shareName; Adapter = [string]$AdapterBox.SelectedItem.InterfaceGuid
         Discovery = [bool]$DiscoveryBox.IsChecked; ReuseEmpty = [bool]$RepairBox.IsChecked
         EjectUsb = [bool]$EjectBox.IsChecked
+        Lab = $script:lab
     }
     try {
         $current | ConvertTo-Json -Compress | Set-Content -LiteralPath $configFile -Encoding ASCII
@@ -319,6 +417,7 @@ $ShortBox.Add_TextChanged({ Update-Preview })
 $ShareBox.Add_TextChanged({ Update-Preview })
 $DriveBox.Add_SelectionChanged({ Update-Preview })
 $RefreshButton.Add_Click({ Refresh-Hardware })
+$LabOptionsButton.Add_Click({ Show-LabOptions })
 $ServerButton.Add_Click({ Start-LabSetup 'Server' })
 $ClientButton.Add_Click({ Start-LabSetup 'Client' })
 $CreditLink.Add_RequestNavigate({
@@ -329,6 +428,7 @@ $CreditLink.Add_RequestNavigate({
 })
 
 Refresh-Hardware
+Update-LabSummary
 if ($configNotice -and -not $compatibilityProblem) { Set-Status $configNotice -Problem }
 
 # Size to the content and scale down only when the Windows work area is smaller.

@@ -2,6 +2,7 @@
 #requires -RunAsAdministrator
 param([ValidateSet('Server','Client')][string]$Role, [switch]$Resume)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Lab-Options.ps1')
 $taskName = 'Two-PC Lab - Resume Setup'
 $cfgPath = Join-Path $PSScriptRoot 'setup-config.json'
 try {
@@ -19,8 +20,10 @@ $name = [string]$cfg.ShareName
 $admin = "$short\Administrator"
 $group = "$short\PCShareUsers"
 $description = "$short two-PC lab managed share"
-$ip = if ($Role -eq 'Server') { '192.168.1.1' } else { '192.168.1.2' }
-$peer = if ($Role -eq 'Server') { '192.168.1.2' } else { '192.168.1.1' }
+$lab = Read-LabOptions $cfg.Lab
+$serverIP = $lab.ServerIP
+$ip = if ($Role -eq 'Server') { $serverIP } else { $lab.ClientIP }
+$peer = if ($Role -eq 'Server') { $lab.ClientIP } else { $serverIP }
 $local = if ($Resume) { $PSScriptRoot } else { $null }
 $hasTask = [bool]$Resume
 $usbId = if ($Resume) { $cfg.UsbId } else { Split-Path -Qualifier $PSScriptRoot }
@@ -31,7 +34,7 @@ $usbSerial = if ($Resume) { $cfg.UsbSerial } elseif ($cfg.EjectUsb -and $usbId -
 function Restart-ForSetup([string]$phase,[string]$login) {
     $state = @{ Role=$Role; Domain=$domain; NetBIOS=$short; ShareName=$name; ShareDrive=$cfg.ShareDrive
         Adapter=$cfg.Adapter; Discovery=$cfg.Discovery; ReuseEmpty=$cfg.ReuseEmpty; Phase=$phase
-        Boot=$os.LastBootUpTime.ToString('o'); EjectUsb=$cfg.EjectUsb; UsbId=$usbId; UsbSerial=$usbSerial }
+        Boot=$os.LastBootUpTime.ToString('o'); EjectUsb=$cfg.EjectUsb; UsbId=$usbId; UsbSerial=$usbSerial; Lab=$lab }
     $state | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $local 'setup-config.json') -Encoding ASCII
     Write-Host "Restarting in 15 seconds. Sign in as $login and setup will continue." -ForegroundColor Yellow
     Start-Sleep -Seconds 15
@@ -43,7 +46,7 @@ function Register-Resume {
     if ($hasTask) { return }
     $waitingState = @{ Role=$Role; Domain=$domain; NetBIOS=$short; ShareName=$name; ShareDrive=$cfg.ShareDrive
         Adapter=$cfg.Adapter; Discovery=$cfg.Discovery; ReuseEmpty=$cfg.ReuseEmpty
-        Boot=$os.LastBootUpTime.ToString('o'); EjectUsb=$cfg.EjectUsb; UsbId=$usbId; UsbSerial=$usbSerial }
+        Boot=$os.LastBootUpTime.ToString('o'); EjectUsb=$cfg.EjectUsb; UsbId=$usbId; UsbSerial=$usbSerial; Lab=$lab }
     $waitingState | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $local 'setup-config.json') -Encoding ASCII
     $worker = Join-Path $local 'Run-Setup.ps1'
     $action = New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'powershell.exe') -Argument ('-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File "' + $worker + '" -Resume') -WorkingDirectory $env:SystemRoot
@@ -59,14 +62,17 @@ function Set-LabIP {
     Get-NetIPConfiguration -InterfaceIndex $nic.ifIndex -Detailed | Format-List * | Out-File -LiteralPath (Join-Path $local 'network-before.txt')
     Set-NetIPInterface -InterfaceIndex $nic.ifIndex -AddressFamily IPv4 -Dhcp Disabled
     Get-NetRoute -InterfaceIndex $nic.ifIndex -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Remove-NetRoute -Confirm:$false
-    Get-NetIPAddress -InterfaceIndex $nic.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -ne $ip -or $_.PrefixLength -ne 24 } | Remove-NetIPAddress -Confirm:$false
+    Get-NetIPAddress -InterfaceIndex $nic.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -ne $ip -or $_.PrefixLength -ne [int]$lab.Prefix } | Remove-NetIPAddress -Confirm:$false
     if (-not (Get-NetIPAddress -InterfaceIndex $nic.ifIndex -IPAddress $ip -ErrorAction SilentlyContinue)) {
-        New-NetIPAddress -InterfaceIndex $nic.ifIndex -IPAddress $ip -PrefixLength 24 | Out-Null
+        New-NetIPAddress -InterfaceIndex $nic.ifIndex -IPAddress $ip -PrefixLength ([int]$lab.Prefix) | Out-Null
     }
-    Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses '192.168.1.1'
     for ($i=0; $i -lt 15; $i++) {
         $addressState = (Get-NetIPAddress -InterfaceIndex $nic.ifIndex -IPAddress $ip).AddressState
-        if ($addressState -eq 'Preferred') { return }
+        if ($addressState -eq 'Preferred') {
+            if ($lab.Gateway) { New-NetRoute -InterfaceIndex $nic.ifIndex -DestinationPrefix '0.0.0.0/0' -NextHop $lab.Gateway | Out-Null }
+            Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses $serverIP
+            return
+        }
         if ($addressState -eq 'Duplicate') { break }
         Start-Sleep -Seconds 1
     }
@@ -161,17 +167,84 @@ function Request-UsbEject {
 }
 function Wait-LabDns {
     for ($i=0; $i -lt 15; $i++) {
-        try { Resolve-DnsName "_ldap._tcp.dc._msdcs.$domain" -Server '192.168.1.1' -Type SRV -DnsOnly -QuickTimeout | Out-Null; return }
-        catch { if ($i -eq 14) { throw "Cannot find $domain at 192.168.1.1. Check the cable and server." } }
+        try { Resolve-DnsName "_ldap._tcp.dc._msdcs.$domain" -Server $serverIP -Type SRV -DnsOnly -QuickTimeout | Out-Null; return }
+        catch { if ($i -eq 14) { throw "Cannot find $domain at $serverIP. Check the cable, server, and Lab options on both PCs." } }
         Start-Sleep -Seconds 2
     }
 }
+
+function Initialize-LabUsers {
+    if (-not $lab.OU) { return }
+    $ouPath = "OU=$($lab.OU),$($ad.DistinguishedName)"
+    $ouName = $lab.OU
+    $existing = Get-ADOrganizationalUnit -SearchBase $ad.DistinguishedName -SearchScope OneLevel -Filter { Name -eq $ouName }
+    if (-not $existing) {
+        New-ADOrganizationalUnit -Name $ouName -Path $ad.DistinguishedName
+    } else { $ouPath = $existing.DistinguishedName }
+    foreach ($student in $validated.Users) {
+        $login = $student.Login
+        $existing = Get-ADUser -Filter { SamAccountName -eq $login }
+        if ($existing) {
+            if (-not $existing.DistinguishedName.EndsWith(",$ouPath", [StringComparison]::OrdinalIgnoreCase)) {
+                throw "$login already exists outside the selected OU. Choose another login or check the account in Active Directory."
+            }
+            if (-not $existing.Enabled) { throw "$login exists but is disabled. Set its password and enable it in Active Directory before retrying." }
+            Write-Host "Keeping the existing $short\$login account and password."
+            continue
+        }
+        $password = Read-Host "NEW LAB USER | Create the password for $short\$login ($($student.Display))" -AsSecureString
+        New-ADUser -Path $ouPath -Name $student.Display -SamAccountName $login -UserPrincipalName "$login@$domain" -AccountPassword $password -Enabled $true -ChangePasswordAtLogon $false
+        if ($lab.LabPasswordRules) {
+            Set-ADUser -Identity $login -CannotChangePassword $true
+            Set-ADUser -Identity $login -PasswordNeverExpires $true
+        }
+    }
+}
+
+function Initialize-LabDhcp {
+    if (-not $lab.DHCP) { return }
+    $otherLinks = @(Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceGuid -ne $nic.InterfaceGuid })
+    if ($otherLinks.Count) { throw 'Disconnect other active physical adapters before enabling lab DHCP. Keep console access.' }
+    $feature = Install-WindowsFeature DHCP -IncludeManagementTools
+    if (-not $feature.Success) { throw 'DHCP role installation failed.' }
+    if ($feature.RestartNeeded -eq 'Yes') { Register-Resume; Restart-ForSetup 'DhcpInstalled' $admin }
+    Import-Module DhcpServer
+    Start-Service DHCPServer
+    $scopeId = $validated.Network
+    $scopes = @(Get-DhcpServerv4Scope)
+    if (@($scopes | Where-Object { "$($_.ScopeId)" -ne $scopeId -or
+        "$($_.SubnetMask)" -ne $validated.Mask -or "$($_.StartRange)" -ne $lab.RangeStart -or
+        "$($_.EndRange)" -ne $lab.RangeEnd -or $_.Name -ne $lab.ScopeName }).Count) {
+        throw 'This server already has a different DHCP scope. Review it in DHCP Manager before changing any settings.'
+    }
+    $binding = Get-DhcpServerv4Binding
+    if (-not ($binding | Where-Object InterfaceAlias -eq $nic.Name)) { throw 'DHCP cannot find the selected Ethernet adapter.' }
+    foreach ($entry in $binding) {
+        Set-DhcpServerv4Binding -InterfaceAlias $entry.InterfaceAlias -BindingState ($entry.InterfaceAlias -eq $nic.Name)
+    }
+    if (-not $scopes.Count) {
+        Add-DhcpServerv4Scope -Name $lab.ScopeName -StartRange $lab.RangeStart -EndRange $lab.RangeEnd -SubnetMask $validated.Mask -State Inactive
+    }
+    $fqdn = "$env:COMPUTERNAME.$domain"
+    $authorized = @(Get-DhcpServerInDC)
+    if (@($authorized | Where-Object { ($_.DnsName -eq $fqdn) -xor ("$($_.IPAddress)" -eq $serverIP) }).Count) {
+        throw 'An existing DHCP authorization conflicts with this server name or IP. Review it in DHCP Manager.'
+    }
+    if (-not ($authorized | Where-Object DnsName -eq $fqdn)) { Add-DhcpServerInDC -DnsName $fqdn -IPAddress $serverIP }
+    $dhcpOptions = @{ ScopeId=$scopeId; DnsServer=$serverIP; DnsDomain=$domain }
+    if ($lab.Gateway) { $dhcpOptions.Router = $lab.Gateway }
+    Set-DhcpServerv4OptionValue @dhcpOptions
+    Set-DhcpServerv4Scope -ScopeId $scopeId -State Active
+    Write-Host "DHCP READY | $($lab.ScopeName): $($lab.RangeStart) to $($lab.RangeEnd)"
+}
+
 try {
+    $validated = Confirm-LabOptions $lab
     if ($Role -notin 'Server','Client' -or $domain -notmatch '^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$' -or
         $short -notmatch '^[a-z0-9](?:[a-z0-9-]{0,13}[a-z0-9])?$' -or $short -match '^\d+$' -or
-        $name -notmatch '^[a-z0-9][a-z0-9 _-]{0,39}$' -or
+        ($lab.CreateShare -and ($name -notmatch '^[a-z0-9][a-z0-9 _-]{0,39}$' -or
         $name -match ' $|^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|Windows|Users|Program Files|Program Files \(x86\)|ProgramData|Recovery)$' -or
-        $cfg.ShareDrive -notmatch '^[A-Z]:$') { throw 'Check the domain names, share name, and drive in the GUI.' }
+        $cfg.ShareDrive -notmatch '^[A-Z]:$'))) { throw 'Check the domain names, share name, and drive in the GUI.' }
 
     $os = Get-CimInstance Win32_OperatingSystem
     if ($Resume -and $cfg.Boot -eq $os.LastBootUpTime.ToString('o')) { exit 0 }
@@ -183,18 +256,21 @@ try {
     if ($Role -eq 'Server' -and ($os.ProductType -eq 1 -or [version]$os.Version -lt [version]'6.3' -or ($pc.PartOfDomain -and $pc.DomainRole -lt 4))) { throw 'Server setup requires a fresh Windows Server 2012 R2 or later, or the existing lab controller.' }
     if ($Role -eq 'Client' -and ($os.ProductType -ne 1 -or [version]$os.Version -lt [version]'10.0' -or $os.Caption -notmatch 'Pro|Enterprise|Education')) { throw 'Client setup requires Windows 10 or later Pro, Enterprise, or Education.' }
 
-    $drive = [IO.DriveInfo]::new("$($cfg.ShareDrive)\")
-    if (-not $drive.IsReady -or $drive.DriveType -ne 'Fixed' -or $drive.DriveFormat -ne 'NTFS') { throw 'Choose a fixed NTFS drive for the share.' }
-    $folder = Join-Path $drive.RootDirectory.FullName $name
+    if ($lab.CreateShare) {
+        $drive = [IO.DriveInfo]::new("$($cfg.ShareDrive)\")
+        if (-not $drive.IsReady -or $drive.DriveType -ne 'Fixed' -or $drive.DriveFormat -ne 'NTFS') { throw 'Choose a fixed NTFS drive for the share.' }
+        $folder = Join-Path $drive.RootDirectory.FullName $name
+        Get-ManagedShare | Out-Null
+    }
     $nic = Get-NetAdapter -Physical | Where-Object { "$($_.InterfaceGuid)" -eq $cfg.Adapter -and $_.MediaType -eq '802.3' } | Select-Object -First 1
     if (-not $nic -or $nic.Status -ne 'Up') { throw 'Connect the selected lab Ethernet link before running setup.' }
-    Get-ManagedShare | Out-Null
 
     if (-not $Resume) {
         $local = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) ('Two-PC-Setup-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $local | Out-Null
         Copy-Item -LiteralPath $PSCommandPath -Destination (Join-Path $local 'Run-Setup.ps1')
-        Write-Host "Setting up $Role on $env:COMPUTERNAME. Using $($nic.Name) and $folder."
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Lab-Options.ps1') -Destination $local
+        Write-Host "Setting up $Role on $env:COMPUTERNAME. $($nic.Name) will use $ip/$($lab.Prefix)."
         Set-LabIP
     }
     if ($Role -eq 'Server') {
@@ -204,7 +280,7 @@ try {
             $feature = Install-WindowsFeature AD-Domain-Services -IncludeManagementTools
             if (-not $feature.Success) { throw 'AD DS role installation failed.' }
             if ($feature.RestartNeeded -eq 'Yes') { Restart-ForSetup 'RoleInstalled' 'the local Administrator' }
-            $recovery = Read-Host 'Create a DSRM recovery password' -AsSecureString
+            $recovery = Read-Host 'DOMAIN RECOVERY | Create a DSRM recovery password' -AsSecureString
             Import-Module ADDSDeployment
             Install-ADDSForest -DomainName $domain -DomainNetbiosName $short -InstallDns -SafeModeAdministratorPassword $recovery -NoRebootOnCompletion -Force | Out-Host
             Restart-ForSetup 'Promoted' $admin
@@ -213,14 +289,18 @@ try {
         Import-Module ActiveDirectory
         $ad = Get-ADDomain -Identity $domain
         if ($ad.NetBIOSName -ne $short) { throw "The existing domain uses the short name $($ad.NetBIOSName)." }
-        if (-not (Get-ADGroup -Filter "SamAccountName -eq 'PCShareUsers'")) { New-ADGroup -Name PCShareUsers -SamAccountName PCShareUsers -GroupScope Global -GroupCategory Security }
-        $user = Get-ADUser -Filter "SamAccountName -eq 'shareuser'"
-        if ($user -and -not $user.Enabled) { throw "The account $short\shareuser is disabled. Check it in Active Directory before retrying." }
-        if (-not $user) {
-            $password = Read-Host "Create the sharing password for $short\shareuser" -AsSecureString
-            New-ADUser -Name shareuser -SamAccountName shareuser -UserPrincipalName "shareuser@$domain" -AccountPassword $password -Enabled $true
+        Initialize-LabDhcp
+        Initialize-LabUsers
+        if ($lab.CreateShare) {
+            if (-not (Get-ADGroup -Filter "SamAccountName -eq 'PCShareUsers'")) { New-ADGroup -Name PCShareUsers -SamAccountName PCShareUsers -GroupScope Global -GroupCategory Security }
+            $user = Get-ADUser -Filter "SamAccountName -eq 'shareuser'"
+            if ($user -and -not $user.Enabled) { throw "The account $short\shareuser is disabled. Check it in Active Directory before retrying." }
+            if (-not $user) {
+                $password = Read-Host "SHARE ACCOUNT | Create the sharing password for $short\shareuser" -AsSecureString
+                New-ADUser -Name shareuser -SamAccountName shareuser -UserPrincipalName "shareuser@$domain" -AccountPassword $password -Enabled $true
+            }
+            Add-ADGroupMember -Identity PCShareUsers -Members shareuser
         }
-        Add-ADGroupMember -Identity PCShareUsers -Members shareuser
     } else {
         Wait-LabDns
         if (-not $pc.PartOfDomain) {
@@ -234,22 +314,24 @@ try {
         if (-not (Test-ComputerSecureChannel)) { throw 'Domain trust check failed. Check the server, DNS, cable, and clocks.' }
     }
     Enable-LabSharing
-    Publish-Share
+    if ($lab.CreateShare) { Publish-Share }
     if ($hasTask) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false; $hasTask = $false }
 
-    $summary = "$($Role.ToUpperInvariant()) READY. Published \\$env:COMPUTERNAME\$name. Open \\$peer in Explorer to see the other PC's shares."
+    $summary = "$($Role.ToUpperInvariant()) READY. IP $ip/$($lab.Prefix), DNS $serverIP."
+    if ($lab.CreateShare) { $summary += " Published \\$env:COMPUTERNAME\$name. Open \\$peer in Explorer to see the other PC's shares." }
     $log = Join-Path $env:ProgramData ((Split-Path -Leaf $local) + '.log')
     $summary | Set-Content -LiteralPath $log -Encoding Unicode
     $localNetwork = Join-Path $local 'network-before.txt'
     if (Test-Path -LiteralPath $localNetwork -PathType Leaf) { Get-Content -LiteralPath $localNetwork | Add-Content -LiteralPath $log -Encoding Unicode }
-    foreach ($file in 'Run-Setup.ps1','setup-config.json','network-before.txt') {
+    foreach ($file in 'Run-Setup.ps1','Lab-Options.ps1','setup-config.json','network-before.txt') {
         $path = Join-Path $local $file
         if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path }
     }
     [IO.Directory]::Delete($local)
     Write-Host $summary -ForegroundColor Green
     try { Request-UsbEject } catch { Write-Warning 'Windows could not eject the USB automatically.' }
-    Write-Host "Sign in as $short\shareuser if asked. Safely eject the USB in Windows if it is still connected."
+    if ($lab.CreateShare) { Write-Host "Use $short\shareuser if Windows asks for share credentials." }
+    Write-Host 'Safely eject the USB in Windows if it is still connected.'
     [void](Read-Host 'Press Enter to close')
 } catch {
     Write-Host "SETUP STOPPED | $($_.Exception.Message)" -ForegroundColor Red

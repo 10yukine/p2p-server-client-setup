@@ -3,13 +3,15 @@ P2P SERVER CLIENT SETUP | START HERE
 1. Prepare both PCs
    Connect exactly two lab PCs directly with a tested crossover UTP cable.
    Disconnect Wi-Fi, VPNs, and other network links. Save your work.
-   The server uses 192.168.1.1 and the client uses 192.168.1.2.
+   Defaults: server 192.168.1.1, client 192.168.1.2. Use Lab options to edit.
    Use Windows Server on SERVER01 and Windows Pro or equivalent on CLIENT01.
    This helper needs Windows PowerShell 5.1.
 
 2. Set up SERVER01
    Open Setup-GUI.bat. Choose your domain, short name, lab Ethernet adapter,
    share name and drive. Click Set up server.
+   For an assessment, enter the assigned IPv4 addresses, OU, users, and
+   optional DHCP scope in Lab options before clicking Set up server.
    Approve Windows administrator access. Enter the recovery password if asked.
    If Windows restarts, sign in as your domain Administrator. Setup resumes.
    If the role install needs an earlier restart, the screen says to use the
@@ -19,15 +21,16 @@ P2P SERVER CLIENT SETUP | START HERE
 3. Set up CLIENT01
    Move the USB to CLIENT01 after Windows confirms you can remove it.
    Open Setup-GUI.bat with the same domain and short name. Click Set up client.
-   Enter the server Administrator password.
+   Check that Lab options shows the same addresses as on the server.
+   Enter the server Administrator password when asked to join.
    If Windows restarts, sign in as domain Administrator. Setup resumes.
    Wait for CLIENT READY.
 
 4. Open the other PC's folder
    In Explorer, open Network and select the other computer.
    If Network takes time to refresh, paste the direct address instead.
-   On CLIENT01 open \\192.168.1.1
-   On SERVER01 open \\192.168.1.2
+   On CLIENT01 open \\192.168.1.1 (or your configured server address).
+   On SERVER01 open \\192.168.1.2 (or your configured client address).
    Sign in as YOURSHORTNAME\shareuser if asked. Open the configured share
    and create a test file. Repeat from the other PC.
 
@@ -42,6 +45,9 @@ removes its task and staging files and leaves a summary under ProgramData.
 Save the error message and recovery path if setup stops. Fix the cause and
 rerun from USB. If Windows leaves the USB connected, use Safely Remove Hardware.
 For an already joined lab, enter the existing domain name and short name.
+See docs\assessment.md for the password prompt images and remaining manual
+steps for folder redirection and backup. For a DHCP demonstration, return
+the client to its static address before testing sharing or redirection.
 
 Credits
 @10yukine | https://github.com/10yukine
