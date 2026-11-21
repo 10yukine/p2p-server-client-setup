@@ -1,0 +1,40 @@
+name: Windows PowerShell compatibility
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  powershell-4:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the Server 2012 R2 compatibility profile
+        shell: powershell
+        run: |
+          Install-Module PSScriptAnalyzer -Repository PSGallery -RequiredVersion 1.24.0 -Scope CurrentUser -Force
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.24.0
+
+          foreach ($script in '_assets/Setup-GUI.ps1', '_assets/Run-Setup.ps1') {
+            $tokens = $null
+            $parseErrors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path, [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors) { throw ($parseErrors -join [Environment]::NewLine) }
+            if ($ast.ScriptRequirements.RequiredPSVersion -ne [version]'4.0') {
+              throw "$script must declare Windows PowerShell 4.0 to support Server 2012 R2."
+            }
+          }
+
+          $rules = @{
+            PSUseCompatibleSyntax = @{ Enable = $true; TargetVersions = @('4.0') }
+            PSUseCompatibleCommands = @{ Enable = $true; TargetProfiles = @('win-8_x64_6.3.9600.0_4.0_x64_4.0.30319.42000_framework') }
+            PSUseCompatibleTypes = @{ Enable = $true; TargetProfiles = @('win-8_x64_6.3.9600.0_4.0_x64_4.0.30319.42000_framework') }
+          }
+          $settings = @{ IncludeRules = @($rules.Keys); Rules = $rules }
+          $findings = @(Invoke-ScriptAnalyzer -Path _assets -Recurse -Settings $settings)
+          if ($findings.Count) {
+            $findings | Format-List ScriptName, Line, RuleName, Message
+            throw 'Windows PowerShell 4.0 compatibility check failed.'
+          }
