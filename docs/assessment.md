@@ -28,8 +28,6 @@ Click **Apply lab options** and **Set up server**. Starting setup saves the opti
 
 ## Password prompts
 
-Open [the offline demo](demo.html) in a browser to compare the one-user and two-user server flows, or practice joining from the client.
-
 ![Illustration of masked DSRM, lab user, share account, and domain join prompts](password-prompts.png)
 
 - **Domain recovery:** On the server's first run, choose a DSRM recovery password.

@@ -1,4 +1,4 @@
-#requires -Version 5.1
+#requires -Version 4.0
 #requires -RunAsAdministrator
 param([ValidateSet('Server','Client')][string]$Role, [switch]$Resume)
 $ErrorActionPreference = 'Stop'
@@ -123,13 +123,15 @@ function Get-ManagedShare {
 
 function Publish-Share {
     $existing = Get-ManagedShare
-    $shareSid = ([Security.Principal.NTAccount]::new($group)).Translate([Security.Principal.SecurityIdentifier])
-    $adminSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
-    $systemSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
-    $acl = [Security.AccessControl.DirectorySecurity]::new()
+    $shareAccount = New-Object System.Security.Principal.NTAccount -ArgumentList $group
+    $shareSid = $shareAccount.Translate([Security.Principal.SecurityIdentifier])
+    $adminSid = New-Object System.Security.Principal.SecurityIdentifier -ArgumentList 'S-1-5-32-544'
+    $systemSid = New-Object System.Security.Principal.SecurityIdentifier -ArgumentList 'S-1-5-18'
+    $acl = New-Object System.Security.AccessControl.DirectorySecurity
     $acl.SetAccessRuleProtection($true,$false)
     foreach ($entry in @(@($systemSid,'FullControl'),@($adminSid,'FullControl'),@($shareSid,'Modify'))) {
-        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($entry[0],$entry[1],'ContainerInherit,ObjectInherit','None','Allow'))
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $entry[0],$entry[1],'ContainerInherit,ObjectInherit','None','Allow'
+        $acl.AddAccessRule($rule)
     }
     $created = $false
     try {
@@ -138,7 +140,8 @@ function Publish-Share {
             $created = $true
         } elseif ($existing) {
             $currentAcl = Get-Acl -LiteralPath $folder
-            $currentAcl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($shareSid,'Modify','ContainerInherit,ObjectInherit','None','Allow'))
+            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $shareSid,'Modify','ContainerInherit,ObjectInherit','None','Allow'
+            $currentAcl.SetAccessRule($rule)
             Set-Acl -LiteralPath $folder -AclObject $currentAcl
         } else { Set-Acl -LiteralPath $folder -AclObject $acl }
         if (-not $existing) {
@@ -257,7 +260,7 @@ try {
     if ($Role -eq 'Client' -and ($os.ProductType -ne 1 -or [version]$os.Version -lt [version]'10.0' -or $os.Caption -notmatch 'Pro|Enterprise|Education')) { throw 'Client setup requires Windows 10 or later Pro, Enterprise, or Education.' }
 
     if ($lab.CreateShare) {
-        $drive = [IO.DriveInfo]::new("$($cfg.ShareDrive)\")
+        $drive = New-Object System.IO.DriveInfo -ArgumentList "$($cfg.ShareDrive)\"
         if (-not $drive.IsReady -or $drive.DriveType -ne 'Fixed' -or $drive.DriveFormat -ne 'NTFS') { throw 'Choose a fixed NTFS drive for the share.' }
         $folder = Join-Path $drive.RootDirectory.FullName $name
         Get-ManagedShare | Out-Null

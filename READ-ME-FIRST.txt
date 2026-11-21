@@ -5,7 +5,7 @@ P2P SERVER CLIENT SETUP | START HERE
    Disconnect Wi-Fi, VPNs, and other network links. Save your work.
    Defaults: server 192.168.1.1, client 192.168.1.2. Use Lab options to edit.
    Use Windows Server on SERVER01 and Windows Pro or equivalent on CLIENT01.
-   This helper needs Windows PowerShell 5.1.
+   Use the built-in Windows PowerShell. Server 2012 R2 already includes 4.0.
 
 2. Set up SERVER01
    Open Setup-GUI.bat. Choose your domain, short name, lab Ethernet adapter,
@@ -46,7 +46,6 @@ removes its task and staging files and leaves a summary under ProgramData.
 Save the error message and recovery path if setup stops. Fix the cause and
 rerun from USB. If Windows leaves the USB connected, use Safely Remove Hardware.
 For an already joined lab, enter the existing domain name and short name.
-Open docs\demo.html in your browser to practice without changing Windows.
 See docs\assessment.md for the password prompt images and remaining manual
 steps for folder redirection and backup. For a DHCP demonstration, return
 the client to its static address before testing sharing or redirection.

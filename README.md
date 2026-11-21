@@ -22,8 +22,8 @@ P2P Server Client Setup is a Windows helper for an isolated two-PC networking la
 ## Before you start
 
 - Connect the two lab PCs directly using a tested crossover UTP Ethernet cable. Check the link lights on both PCs before opening the helper.
-- Use Windows Server with Desktop Experience and a client edition of Windows Pro, Enterprise, or Education. Both PCs need Windows PowerShell 5.1, working Ethernet drivers, and administrator access.
-- Open **Setup-GUI.bat** to check compatibility automatically. It shows the detected edition and enables the matching setup button. On Windows Server 2012 R2 with an earlier PowerShell version, it explains that Windows Management Framework 5.1 is required before setup can start.
+- Use Windows Server 2012 R2 or later with a graphical desktop and Windows 10 or later Pro, Enterprise, or Education on the client. Both PCs need working Ethernet drivers and administrator access.
+- Open **Setup-GUI.bat** to check compatibility and enable the matching setup button. The helper uses the built-in Windows PowerShell, including 4.0 on stock Server 2012 R2.
 - Name the PCs before creating or joining the domain. `SERVER01` and `CLIENT01` work well.
 - Save open work. Domain setup may restart Windows automatically.
 
@@ -46,13 +46,13 @@ Create a disposable file in each remote share and check that it appears on the o
 
 For a custom network or classroom assessment, open **Lab options** before starting and use the same values on both PCs. Enter User 1's display and sign-in names separately. Check **Add User 2 (optional)** only when you need a second account.
 
-Open [the offline demo](docs/demo.html) from the project folder in Edge, Chrome, or Firefox to try the server and client flows, including the password prompts. See the [assessment walkthrough](docs/assessment.md) for example settings and the manual Folder Redirection and Windows Server Backup steps.
+See the [assessment walkthrough](docs/assessment.md) for example settings, password prompts, and the manual Folder Redirection and Windows Server Backup steps.
 
 ## Troubleshooting
 
 | If you see | Try |
 | --- | --- |
-| PowerShell 4.0 on Windows Server 2012 R2 | On a connected PC, get `Win8.1AndW2K12R2-KB3191564-x64.msu` from [Microsoft's WMF 5.1 download](https://www.microsoft.com/en-us/download/details.aspx?id=54616). Transfer it to the server, install it and restart. Check `$PSVersionTable.PSVersion` in Windows PowerShell before reopening the helper. |
+| A message says Windows PowerShell 5.1 is required | Replace both `Setup-GUI.bat` and the scripts in `_assets` with the current version. If you have a saved `_assets/setup-config.json`, keep it. |
 | No Ethernet adapter | Check the cable and link lights, then click **Refresh**. |
 | Domain cannot be found | Confirm the server reached **SERVER READY** and both PCs use the same domain name. |
 | PC absent from Explorer Network | Open its direct address. Explorer discovery depends on Windows and the network. |

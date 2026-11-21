@@ -1,15 +1,10 @@
-﻿$ErrorActionPreference = 'Stop'
+﻿#requires -Version 4.0
+$ErrorActionPreference = 'Stop'
 try {
     $os = Get-CimInstance -ClassName Win32_OperatingSystem
     $windowsName = $os.Caption -replace '^Microsoft\s+', ''
 } catch {
     Write-Host 'This helper could not identify this Windows installation. Ask an administrator to check Windows Management Instrumentation (WMI).' -ForegroundColor Red
-    exit 1
-}
-
-if ($PSVersionTable.PSVersion -lt [version]'5.1') {
-    Write-Host "Detected $windowsName with Windows PowerShell $($PSVersionTable.PSVersion)."
-    Write-Host 'This helper needs Windows PowerShell 5.1. On Windows Server 2012 R2, ask your administrator to install Windows Management Framework 5.1, then reopen Setup-GUI.bat.' -ForegroundColor Yellow
     exit 1
 }
 
@@ -24,6 +19,8 @@ catch {
     Write-Host "Detected $windowsName, but the Windows desktop libraries could not load. Ask your administrator to check the graphical desktop and .NET Framework installation." -ForegroundColor Red
     exit 1
 }
+
+$unboundedSize = New-Object System.Windows.Size -ArgumentList ([double]::PositiveInfinity),([double]::PositiveInfinity)
 
 function Get-CompatibilityProblem($Windows) {
     if ($Windows.ProductType -in 2,3) {
@@ -236,7 +233,7 @@ function Update-LabSummary {
 }
 
 function Show-LabOptions {
-    $dialog = [Windows.Window]::new()
+    $dialog = New-Object System.Windows.Window
     $dialog.Title = 'Lab options'
     $dialog.Owner = $window
     $dialog.WindowStartupLocation = 'CenterOwner'
@@ -244,9 +241,9 @@ function Show-LabOptions {
     $dialog.ResizeMode = 'NoResize'
     $dialog.FontFamily = $window.FontFamily
     $dialog.FontSize = $window.FontSize
-    $panel = [Windows.Controls.StackPanel]::new()
+    $panel = New-Object System.Windows.Controls.StackPanel
     $panel.Width = 620
-    $panel.Margin = [Windows.Thickness]::new(16)
+    $panel.Margin = New-Object System.Windows.Thickness -ArgumentList 16
     $dialog.Content = $panel
     $controls = @{}
     $savedUsers = @(Get-LabUserEntries $script:lab.Users)
@@ -257,10 +254,10 @@ function Show-LabOptions {
         SecondLogin = $savedUsers[1].Login
     }
     $extraUsers = @($savedUsers | Select-Object -Skip 2 -ExpandProperty Entry)
-    $secondUser = [Windows.Controls.CheckBox]::new()
+    $secondUser = New-Object System.Windows.Controls.CheckBox
     $secondUser.Content = 'Add User 2 (optional)'
     $secondUser.IsChecked = $savedUsers.Count -ge 2
-    $secondUser.Margin = [Windows.Thickness]::new(0,0,0,4)
+    $secondUser.Margin = New-Object System.Windows.Thickness -ArgumentList 0,0,0,4
     $pairs = @(
         @('ServerIP','Server IPv4','ClientIP','Client IPv4'),
         @('Prefix','Subnet prefix (24 = 255.255.255.0)','Gateway','Gateway (optional)'),
@@ -271,16 +268,16 @@ function Show-LabOptions {
     )
     foreach ($pair in $pairs) {
         if ($pair[0] -eq 'SecondDisplay') { [void]$panel.Children.Add($secondUser) }
-        $row = [Windows.Controls.Primitives.UniformGrid]::new()
+        $row = New-Object System.Windows.Controls.Primitives.UniformGrid
         $row.Columns = 2
         [void]$panel.Children.Add($row)
         for ($i=0; $i -lt $pair.Count; $i+=2) {
-            $field = [Windows.Controls.StackPanel]::new()
-            $field.Margin = [Windows.Thickness]::new(0,0,8,8)
-            $label = [Windows.Controls.Label]::new()
-            $label.Padding = [Windows.Thickness]::new(0,0,0,3)
+            $field = New-Object System.Windows.Controls.StackPanel
+            $field.Margin = New-Object System.Windows.Thickness -ArgumentList 0,0,8,8
+            $label = New-Object System.Windows.Controls.Label
+            $label.Padding = New-Object System.Windows.Thickness -ArgumentList 0,0,0,3
             $label.Content = $pair[$i+1]
-            $box = [Windows.Controls.TextBox]::new()
+            $box = New-Object System.Windows.Controls.TextBox
             $box.MinHeight = 26
             $key = $pair[$i]
             $box.Text = if ($userFields.ContainsKey($key)) { [string]$userFields[$key] } else { [string]$script:lab[$key] }
@@ -300,20 +297,20 @@ function Show-LabOptions {
         @('DHCP','Install and configure IPv4 DHCP on the server'),
         @('LabPasswordRules','For new lab users: passwords never expire and users cannot change them')
     )) {
-        $box = [Windows.Controls.CheckBox]::new()
+        $box = New-Object System.Windows.Controls.CheckBox
         $box.Content = $option[1]
         $box.IsChecked = [bool]$script:lab[$option[0]]
-        $box.Margin = [Windows.Thickness]::new(0,3,0,3)
+        $box.Margin = New-Object System.Windows.Thickness -ArgumentList 0,3,0,3
         $controls[$option[0]] = $box
         [void]$panel.Children.Add($box)
     }
-    $tip = [Windows.Controls.TextBlock]::new()
+    $tip = New-Object System.Windows.Controls.TextBlock
     $tip.Text = 'DNS uses the server IP. Leave gateway blank on a direct cable. Leave User 1 blank to skip new accounts.'
     if ($extraUsers.Count) { $tip.Text += " Your saved profile also has $($extraUsers.Count) additional domain user(s)." }
     $tip.TextWrapping = 'Wrap'
-    $tip.Margin = [Windows.Thickness]::new(0,8,0,8)
+    $tip.Margin = New-Object System.Windows.Thickness -ArgumentList 0,8,0,8
     [void]$panel.Children.Add($tip)
-    $save = [Windows.Controls.Button]::new()
+    $save = New-Object System.Windows.Controls.Button
     $save.Content = 'Apply lab options'
     $save.IsDefault = $true
     $save.MinHeight = 30
@@ -348,10 +345,10 @@ function Show-LabOptions {
             [void][Windows.MessageBox]::Show($dialog, $_.Exception.Message, 'Check lab options', 'OK', 'Warning')
         }
     }.GetNewClosure())
-    $panel.Measure([Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity))
+    $panel.Measure($unboundedSize)
     $work = [Windows.SystemParameters]::WorkArea
     $factor = [math]::Min(1.0,[math]::Min(($work.Width-28)/$panel.DesiredSize.Width,($work.Height-56)/$panel.DesiredSize.Height))
-    if ($factor -lt 1) { $panel.LayoutTransform = [Windows.Media.ScaleTransform]::new($factor,$factor) }
+    if ($factor -lt 1) { $panel.LayoutTransform = New-Object System.Windows.Media.ScaleTransform -ArgumentList $factor,$factor }
     if ($dialog.ShowDialog()) {
         $script:lab = $result.Lab
         Update-LabSummary
@@ -473,9 +470,9 @@ Update-LabSummary
 if ($configNotice -and -not $compatibilityProblem) { Set-Status $configNotice -Problem }
 
 # Size to the content and scale down only when the Windows work area is smaller.
-$Page.Measure([Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity))
+$Page.Measure($unboundedSize)
 $workArea = [Windows.SystemParameters]::WorkArea
 $scale = [Math]::Min(1.0, [Math]::Min(($workArea.Width - 24) / $Page.DesiredSize.Width,
     ($workArea.Height - 50) / $Page.DesiredSize.Height))
-if ($scale -lt 1) { $Page.LayoutTransform = [Windows.Media.ScaleTransform]::new($scale, $scale) }
+if ($scale -lt 1) { $Page.LayoutTransform = New-Object System.Windows.Media.ScaleTransform -ArgumentList $scale,$scale }
 [void]$window.ShowDialog()
