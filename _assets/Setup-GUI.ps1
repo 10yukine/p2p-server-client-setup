@@ -249,14 +249,28 @@ function Show-LabOptions {
     $panel.Margin = [Windows.Thickness]::new(16)
     $dialog.Content = $panel
     $controls = @{}
+    $savedUsers = @(Get-LabUserEntries $script:lab.Users)
+    $userFields = @{
+        FirstDisplay = $savedUsers[0].Display
+        FirstLogin = $savedUsers[0].Login
+        SecondDisplay = $savedUsers[1].Display
+        SecondLogin = $savedUsers[1].Login
+    }
+    $extraUsers = @($savedUsers | Select-Object -Skip 2 -ExpandProperty Entry)
+    $secondUser = [Windows.Controls.CheckBox]::new()
+    $secondUser.Content = 'Add User 2 (optional)'
+    $secondUser.IsChecked = $savedUsers.Count -ge 2
+    $secondUser.Margin = [Windows.Thickness]::new(0,0,0,4)
     $pairs = @(
         @('ServerIP','Server IPv4','ClientIP','Client IPv4'),
         @('Prefix','Subnet prefix (24 = 255.255.255.0)','Gateway','Gateway (optional)'),
-        @('OU','OU name (optional)','Users','Users: Display Name:login, separated by commas'),
         @('RangeStart','DHCP range start','RangeEnd','DHCP range end'),
-        @('ScopeName','DHCP scope name')
+        @('ScopeName','DHCP scope name','OU','OU name (required for users)'),
+        @('FirstDisplay','User 1 display name','FirstLogin','User 1 sign-in name'),
+        @('SecondDisplay','User 2 display name','SecondLogin','User 2 sign-in name')
     )
     foreach ($pair in $pairs) {
+        if ($pair[0] -eq 'SecondDisplay') { [void]$panel.Children.Add($secondUser) }
         $row = [Windows.Controls.Primitives.UniformGrid]::new()
         $row.Columns = 2
         [void]$panel.Children.Add($row)
@@ -268,14 +282,19 @@ function Show-LabOptions {
             $label.Content = $pair[$i+1]
             $box = [Windows.Controls.TextBox]::new()
             $box.MinHeight = 26
-            $box.Text = [string]$script:lab[$pair[$i]]
+            $key = $pair[$i]
+            $box.Text = if ($userFields.ContainsKey($key)) { [string]$userFields[$key] } else { [string]$script:lab[$key] }
             $label.Target = $box
-            $controls[$pair[$i]] = $box
+            $controls[$key] = $box
             [void]$field.Children.Add($label)
             [void]$field.Children.Add($box)
             [void]$row.Children.Add($field)
         }
     }
+    $controls.SecondDisplay.IsEnabled = $secondUser.IsChecked
+    $controls.SecondLogin.IsEnabled = $secondUser.IsChecked
+    $secondUser.Add_Checked({ $controls.SecondDisplay.IsEnabled = $controls.SecondLogin.IsEnabled = $true }.GetNewClosure())
+    $secondUser.Add_Unchecked({ $controls.SecondDisplay.IsEnabled = $controls.SecondLogin.IsEnabled = $false }.GetNewClosure())
     foreach ($option in @(
         @('CreateShare','Create the basic file share on both PCs'),
         @('DHCP','Install and configure IPv4 DHCP on the server'),
@@ -289,7 +308,8 @@ function Show-LabOptions {
         [void]$panel.Children.Add($box)
     }
     $tip = [Windows.Controls.TextBlock]::new()
-    $tip.Text = 'Both PCs use the server IP for DNS. Leave the gateway blank if there is no router. The client stays static until you switch it to automatic for a DHCP demonstration.'
+    $tip.Text = 'DNS uses the server IP. Leave gateway blank on a direct cable. Leave User 1 blank to skip new accounts.'
+    if ($extraUsers.Count) { $tip.Text += " Your saved profile also has $($extraUsers.Count) additional domain user(s)." }
     $tip.TextWrapping = 'Wrap'
     $tip.Margin = [Windows.Thickness]::new(0,8,0,8)
     [void]$panel.Children.Add($tip)
@@ -298,24 +318,45 @@ function Show-LabOptions {
     $save.IsDefault = $true
     $save.MinHeight = 30
     [void]$panel.Children.Add($save)
-    $save.Add_Click({ $dialog.DialogResult = $true }.GetNewClosure())
+    $result = @{ Lab = $null }
+    $save.Add_Click({
+        try {
+            $candidate = @{}
+            foreach ($key in (Get-LabDefaults).Keys) {
+                if ($key -eq 'Users') { continue }
+                $candidate[$key] = if ($controls[$key] -is [Windows.Controls.CheckBox]) { [bool]$controls[$key].IsChecked } else { $controls[$key].Text.Trim() }
+            }
+            $entries = @()
+            foreach ($slot in 'First','Second') {
+                if ($slot -eq 'Second' -and -not $secondUser.IsChecked) { continue }
+                $display = $controls["${slot}Display"].Text.Trim()
+                $login = $controls["${slot}Login"].Text.Trim()
+                $number = if ($slot -eq 'First') { 1 } else { 2 }
+                if ($number -eq 1 -and -not ($display -or $login)) {
+                    if ($secondUser.IsChecked) { throw 'Enter User 1 before adding User 2.' }
+                    continue
+                }
+                if (-not ($display -and $login)) { throw "Enter both names for User $number." }
+                if ($display -match '[:,]' -or $login -match '[:,]') { throw "Remove commas and colons from User $number." }
+                $entries += "${display}:$login"
+            }
+            $candidate.Users = ($entries + $extraUsers) -join ','
+            [void](Confirm-LabOptions $candidate)
+            $result.Lab = $candidate
+            $dialog.DialogResult = $true
+        } catch {
+            [void][Windows.MessageBox]::Show($dialog, $_.Exception.Message, 'Check lab options', 'OK', 'Warning')
+        }
+    }.GetNewClosure())
     $panel.Measure([Windows.Size]::new([double]::PositiveInfinity,[double]::PositiveInfinity))
     $work = [Windows.SystemParameters]::WorkArea
     $factor = [math]::Min(1.0,[math]::Min(($work.Width-28)/$panel.DesiredSize.Width,($work.Height-56)/$panel.DesiredSize.Height))
     if ($factor -lt 1) { $panel.LayoutTransform = [Windows.Media.ScaleTransform]::new($factor,$factor) }
-    # A Window instance can only be shown once. Validate before accepting its values.
     if ($dialog.ShowDialog()) {
-        $candidate = @{}
-        foreach ($key in $controls.Keys) {
-            $candidate[$key] = if ($controls[$key] -is [Windows.Controls.CheckBox]) { [bool]$controls[$key].IsChecked } else { $controls[$key].Text.Trim() }
-        }
-        try {
-            [void](Confirm-LabOptions $candidate)
-            $script:lab = $candidate
-            Update-LabSummary
-            Update-Preview
-            Set-Status 'Lab options applied. Both PCs must use the same network settings.'
-        } catch { Set-Status $_.Exception.Message -Problem }
+        $script:lab = $result.Lab
+        Update-LabSummary
+        Update-Preview
+        Set-Status 'Lab options applied. Both PCs must use the same network settings.'
     }
 }
 

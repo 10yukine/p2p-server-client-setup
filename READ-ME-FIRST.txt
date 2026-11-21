@@ -12,6 +12,7 @@ P2P SERVER CLIENT SETUP | START HERE
    share name and drive. Click Set up server.
    For an assessment, enter the assigned IPv4 addresses, OU, users, and
    optional DHCP scope in Lab options before clicking Set up server.
+   Enter User 1's two names. Check Add User 2 only if you need another account.
    Approve Windows administrator access. Enter the recovery password if asked.
    If Windows restarts, sign in as your domain Administrator. Setup resumes.
    If the role install needs an earlier restart, the screen says to use the
@@ -45,6 +46,7 @@ removes its task and staging files and leaves a summary under ProgramData.
 Save the error message and recovery path if setup stops. Fix the cause and
 rerun from USB. If Windows leaves the USB connected, use Safely Remove Hardware.
 For an already joined lab, enter the existing domain name and short name.
+Open docs\demo.html in your browser to practice without changing Windows.
 See docs\assessment.md for the password prompt images and remaining manual
 steps for folder redirection and backup. For a DHCP demonstration, return
 the client to its static address before testing sharing or redirection.

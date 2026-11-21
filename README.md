@@ -44,12 +44,15 @@ P2P Server Client Setup is a Windows helper for an isolated two-PC networking la
 
 Create a disposable file in each remote share and check that it appears on the other PC. The shares are separate folders.
 
-For a custom network or classroom assessment, open **Lab options** before starting and use the same values on both PCs. See the [assessment walkthrough](docs/assessment.md) for sample settings, password prompt illustrations, and the manual Folder Redirection and Windows Server Backup steps.
+For a custom network or classroom assessment, open **Lab options** before starting and use the same values on both PCs. Enter User 1's display and sign-in names separately. Check **Add User 2 (optional)** only when you need a second account.
+
+Open [the offline demo](docs/demo.html) from the project folder in Edge, Chrome, or Firefox to try the server and client flows, including the password prompts. See the [assessment walkthrough](docs/assessment.md) for example settings and the manual Folder Redirection and Windows Server Backup steps.
 
 ## Troubleshooting
 
 | If you see | Try |
 | --- | --- |
+| PowerShell 4.0 on Windows Server 2012 R2 | On a connected PC, get `Win8.1AndW2K12R2-KB3191564-x64.msu` from [Microsoft's WMF 5.1 download](https://www.microsoft.com/en-us/download/details.aspx?id=54616). Transfer it to the server, install it and restart. Check `$PSVersionTable.PSVersion` in Windows PowerShell before reopening the helper. |
 | No Ethernet adapter | Check the cable and link lights, then click **Refresh**. |
 | Domain cannot be found | Confirm the server reached **SERVER READY** and both PCs use the same domain name. |
 | PC absent from Explorer Network | Open its direct address. Explorer discovery depends on Windows and the network. |

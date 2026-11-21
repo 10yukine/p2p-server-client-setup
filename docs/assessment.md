@@ -17,7 +17,9 @@ Use two isolated PCs connected directly by crossover UTP. The helper replaces IP
 | Subnet prefix | `24` for `255.255.255.0` |
 | DNS | Both PCs use the server IPv4 address automatically |
 | Gateway | Blank on a direct cable. Enter `192.168.10.1` if the rubric explicitly requires it. |
-| OU and users | `Students` and `Student One:lab_user01, Student Two:lab_user02`. Use the assigned names and logins. |
+| OU name | `Students` |
+| User 1 | Display name `Student One`, sign-in name `lab_user01` |
+| User 2 | Check **Add User 2 (optional)** if required. Display name `Student Two`, sign-in name `lab_user02`. |
 | DHCP | Enable if required. Enter the assigned scope name and range, e.g. `192.168.10.100` to `192.168.10.150`. |
 | Basic sharing | Optional. Folder redirection uses its own dedicated share. |
 | Lab password rules | Enable only for new lab accounts if both password settings are required. |
@@ -25,6 +27,8 @@ Use two isolated PCs connected directly by crossover UTP. The helper replaces IP
 Click **Apply lab options** and **Set up server**. Starting setup saves the options locally. Use the same USB on the client and confirm the same domain, address settings, and options before clicking **Set up client**.
 
 ## Password prompts
+
+Open [the offline demo](demo.html) in a browser to compare the one-user and two-user server flows, or practice joining from the client.
 
 ![Illustration of masked DSRM, lab user, share account, and domain join prompts](password-prompts.png)
 

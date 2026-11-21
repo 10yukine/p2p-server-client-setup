@@ -27,6 +27,16 @@ function Read-LabOptions($Saved) {
     return $lab
 }
 
+function Get-LabUserEntries([string]$Users) {
+    if (-not $Users) { return }
+    foreach ($entry in $Users.Split(',')) {
+        $pair = $entry.Trim() -split ':',2
+        $display = $pair[0].Trim()
+        $login = if ($pair.Count -eq 2) { $pair[1].Trim() } else { $display }
+        [pscustomobject]@{ Display=$display; Login=$login; Entry=$entry }
+    }
+}
+
 function Confirm-LabOptions([hashtable]$Lab) {
     if ([string]$Lab.Prefix -notmatch '^([1-9]|[12][0-9]|30)$') { throw 'Use a prefix length from 1 to 30. For subnet mask 255.255.255.0, enter 24.' }
     $server = Convert-LabIPv4 $Lab.ServerIP 'Server IP'
@@ -55,13 +65,12 @@ function Confirm-LabOptions([hashtable]$Lab) {
     $displayNames = @{}
     if ($Lab.Users) {
         if (-not $Lab.OU) { throw 'Enter an OU name before adding domain users.' }
-        foreach ($entry in $Lab.Users.Split(',')) {
-            $pair = $entry.Trim() -split ':',2
-            $display = $pair[0].Trim()
-            $login = if ($pair.Count -eq 2) { $pair[1].Trim() } else { $display }
+        foreach ($user in Get-LabUserEntries $Lab.Users) {
+            $display = $user.Display
+            $login = $user.Login
             if ($display -notmatch '^[a-zA-Z0-9][a-zA-Z0-9 _-]{0,63}$' -or
                 $login -notmatch '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,19}$' -or $login -in 'Administrator','Guest','krbtgt','shareuser' -or
-                $logins.ContainsKey($login) -or $displayNames.ContainsKey($display)) { throw "Check '$entry'. Use unique names and logins in the format Display Name:login, separated by commas." }
+                $logins.ContainsKey($login) -or $displayNames.ContainsKey($display)) { throw "Check '$($user.Entry)'. Use a unique display name and a unique sign-in name (up to 20 characters)." }
             $logins[$login] = $true
             $displayNames[$display] = $true
             $users += [pscustomobject]@{ Display=$display; Login=$login }
